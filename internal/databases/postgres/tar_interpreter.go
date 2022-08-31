@@ -36,31 +36,6 @@ func NewFileTarInterpreter(
 		filesToUnwrap, newUnwrapResult(), createNewIncrementalFiles}
 }
 
-// write file from reader to local file
-func WriteLocalFile(fileReader io.Reader, header *tar.Header, localFile *os.File, fsync bool) error {
-	_, err := io.Copy(localFile, fileReader)
-	if err != nil {
-		err1 := os.Remove(localFile.Name())
-		if err1 != nil {
-			tracelog.ErrorLogger.Fatalf("Interpret: failed to remove localFile '%s' because of error: %v",
-				localFile.Name(), err1)
-		}
-		return errors.Wrap(err, "Interpret: copy failed")
-	}
-
-	mode := os.FileMode(header.Mode)
-	if err = localFile.Chmod(mode); err != nil {
-		return errors.Wrap(err, "Interpret: chmod failed")
-	}
-
-	if fsync {
-		err = localFile.Sync()
-		return errors.Wrap(err, "Interpret: fsync failed")
-	}
-
-	return nil
-}
-
 // TODO : unit tests
 func (tarInterpreter *FileTarInterpreter) unwrapRegularFileOld(fileReader io.Reader,
 	fileInfo *tar.Header,
@@ -90,7 +65,7 @@ func (tarInterpreter *FileTarInterpreter) unwrapRegularFileOld(fileReader io.Rea
 	}
 	defer utility.LoggedClose(file, "")
 
-	return WriteLocalFile(fileReader, fileInfo, file, fsync)
+	return utility.WriteLocalFile(fileReader, fileInfo, file, fsync)
 }
 
 // handleSymlink will follow all required logic to properly handle symlinks.
