@@ -137,13 +137,10 @@ func ConfigureLimiters() {
 }
 
 func ConfigureStorage(ctx context.Context) (storage.HashableStorage, error) {
-	var rootWraps []storage.WrapRootFolder
-	if limiters.NetworkLimiter != nil {
-		rootWraps = append(rootWraps, func(prevFolder storage.Folder) (newFolder storage.Folder) {
-			return NewLimitedFolder(prevFolder, limiters.NetworkLimiter)
-		})
+	rootWraps, err := configureRootWraps()
+	if err != nil {
+		return nil, err
 	}
-	rootWraps = append(rootWraps, ConfigureStoragePrefix)
 
 	st, err := ConfigureStorageForSpecificConfig(ctx, viper.GetViper(), rootWraps...)
 	if err != nil {
@@ -151,6 +148,30 @@ func ConfigureStorage(ctx context.Context) (storage.HashableStorage, error) {
 	}
 
 	return st, nil
+}
+
+// configureRootWraps returns the wrappers applied to every configured storage root folder.
+func configureRootWraps() ([]storage.WrapRootFolder, error) {
+	var rootWraps []storage.WrapRootFolder
+	if limiters.NetworkLimiter != nil {
+		rootWraps = append(rootWraps, func(prevFolder storage.Folder) (newFolder storage.Folder) {
+			return NewLimitedFolder(prevFolder, limiters.NetworkLimiter)
+		})
+	}
+
+	// Wrapped after the limiter, so the time spent waiting for the rate limiter counts too.
+	uploadFileTimeout, err := conf.GetTimeoutSetting(conf.UploadFileTimeoutSetting)
+	if err != nil {
+		return nil, err
+	}
+	if uploadFileTimeout > 0 {
+		rootWraps = append(rootWraps, func(prevFolder storage.Folder) (newFolder storage.Folder) {
+			return NewTimeoutFolder(prevFolder, uploadFileTimeout)
+		})
+	}
+
+	rootWraps = append(rootWraps, ConfigureStoragePrefix)
+	return rootWraps, nil
 }
 
 func ConfigureStoragePrefix(folder storage.Folder) storage.Folder {
@@ -593,13 +614,10 @@ func ConfigureFailoverStorages(ctx context.Context) (failovers map[string]storag
 			return nil, fmt.Errorf("failover storage %s: %v", name, err)
 		}
 
-		var rootWraps []storage.WrapRootFolder
-		if limiters.NetworkLimiter != nil {
-			rootWraps = append(rootWraps, func(prevFolder storage.Folder) (newFolder storage.Folder) {
-				return NewLimitedFolder(prevFolder, limiters.NetworkLimiter)
-			})
+		rootWraps, err := configureRootWraps()
+		if err != nil {
+			return nil, err
 		}
-		rootWraps = append(rootWraps, ConfigureStoragePrefix)
 
 		st, err := ConfigureStorageForSpecificConfig(ctx, cfg, rootWraps...)
 		if err != nil {

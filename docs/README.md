@@ -182,6 +182,13 @@ The directory to store profiles in. Defaults to `$TMPDIR`.
 
 Network traffic rate limit during the ```backup-push```/```backup-fetch``` operations in bytes per second.
 
+### Timeouts
+* `WALG_UPLOAD_FILE_TIMEOUT`
+
+Maximum duration of a single file upload to storage, e.g. `5m`. Protects against uploads hanging forever when the
+storage endpoint stops responding. Must be large enough to upload the biggest file (e.g. a backup tar partition)
+at the available bandwidth. `-1` (the default) disables it.
+
 
 ### Database-specific options
 **More options are available for the chosen database. See it in [Databases](#databases)**
