@@ -45,7 +45,10 @@ type Config struct {
 	Disable100Continue       bool
 	EnableVersioning         string
 	DeleteBatchSize          int
-	showAllVersions          bool // When true, include deleted objects in listing (for st ls --all-versions)
+	// IdleTimeout fails an S3 request (which is then retried) when its connection sends or receives
+	// nothing for this long. 0 means no limit.
+	IdleTimeout     time.Duration
+	showAllVersions bool // When true, include deleted objects in listing (for st ls --all-versions)
 }
 
 type Secrets struct {

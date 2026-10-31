@@ -164,9 +164,13 @@ func configureRootWraps() ([]storage.WrapRootFolder, error) {
 	if err != nil {
 		return nil, err
 	}
-	if uploadFileTimeout > 0 {
+	operationTimeout, err := conf.GetTimeoutSetting(conf.StorageOperationTimeoutSetting)
+	if err != nil {
+		return nil, err
+	}
+	if uploadFileTimeout > 0 || operationTimeout > 0 {
 		rootWraps = append(rootWraps, func(prevFolder storage.Folder) (newFolder storage.Folder) {
-			return NewTimeoutFolder(prevFolder, uploadFileTimeout)
+			return NewTimeoutFolder(prevFolder, uploadFileTimeout, operationTimeout)
 		})
 	}
 

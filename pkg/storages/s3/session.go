@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -99,7 +100,8 @@ func buildS3Options(cfg *Config, scheme, host string) ([]func(*s3.Options), erro
 	}
 
 	if cfg.EndpointSource != "" {
-		s3Opts = append(s3Opts, withDynamicEndpoint(cfg.EndpointSource, cfg.EndpointPort, cfg.Endpoint, scheme, host))
+		s3Opts = append(s3Opts, withDynamicEndpoint(cfg.EndpointSource, cfg.EndpointPort, cfg.Endpoint, scheme, host,
+			cfg.IdleTimeout))
 	}
 
 	if cfg.RequestAdditionalHeaders != "" {
@@ -137,6 +139,12 @@ func applyYCSessionToken(awsCfg *aws.Config, cfg *Config) ([]func(*s3.Options), 
 
 func buildHTTPClient(cfg *Config, tlsServerName string) (aws.HTTPClient, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// Without it a request to an endpoint that accepts connections but never answers (or stops reading
+	// the request) waits forever. A timed out request is retried by the retryer on a new connection.
+	if cfg.IdleTimeout > 0 {
+		dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+		transport.DialContext = withIdleTimeout(dialer.DialContext, cfg.IdleTimeout)
+	}
 
 	if tlsServerName != "" {
 		if transport.TLSClientConfig == nil {
@@ -237,8 +245,12 @@ func detectAWSRegionByBucket(ctx context.Context, awsCfg *aws.Config, bucket, en
 // withDynamicEndpoint rewrites the request URL host using a value fetched from
 // EndpointSource on each request. It runs as a Build middleware so the rewrite
 // happens before signing, matching v1's Validate handler timing.
-func withDynamicEndpoint(endpointSource, port, staticEndpoint, scheme, host string) func(*s3.Options) {
+func withDynamicEndpoint(
+	endpointSource, port, staticEndpoint, scheme, host string,
+	timeout time.Duration,
+) func(*s3.Options) {
 	mw := &dynamicEndpointMiddleware{
+		timeout:        timeout,
 		source:         endpointSource,
 		port:           port,
 		staticEndpoint: staticEndpoint,
@@ -253,6 +265,7 @@ func withDynamicEndpoint(endpointSource, port, staticEndpoint, scheme, host stri
 }
 
 type dynamicEndpointMiddleware struct {
+	timeout        time.Duration
 	source         string
 	port           string
 	staticEndpoint string
@@ -269,7 +282,7 @@ func (m *dynamicEndpointMiddleware) HandleBuild(
 	if !ok {
 		return next.HandleBuild(ctx, in)
 	}
-	endpoint := requestEndpointFromSource(ctx, m.source, m.port)
+	endpoint := requestEndpointFromSource(ctx, m.source, m.port, m.timeout)
 	if endpoint != nil {
 		tracelog.DebugLogger.Printf("using S3 endpoint %s", *endpoint)
 		req.Host = m.host
@@ -395,13 +408,11 @@ func tlsServerName(host string) string {
 	return host
 }
 
-func requestEndpointFromSource(ctx context.Context, endpointSource, port string) *string {
-	t := http.DefaultTransport
-	c := http.DefaultClient
-	if tr, ok := t.(*http.Transport); ok {
-		tr.DisableKeepAlives = true
-		c = &http.Client{Transport: tr}
-	}
+func requestEndpointFromSource(ctx context.Context, endpointSource, port string, timeout time.Duration) *string {
+	// Clone instead of changing http.DefaultTransport, which is shared by the whole process.
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DisableKeepAlives = true
+	c := &http.Client{Transport: tr, Timeout: timeout}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpointSource, nil)
 	if err != nil {
 		tracelog.ErrorLogger.Printf("Endpoint source request error: %v ", err)
