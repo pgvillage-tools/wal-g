@@ -46,6 +46,7 @@ const (
 	StoragePrefixSetting          = "WALG_STORAGE_PREFIX"
 	DiskRateLimitSetting          = "WALG_DISK_RATE_LIMIT"
 	NetworkRateLimitSetting       = "WALG_NETWORK_RATE_LIMIT"
+	UploadFileTimeoutSetting      = "WALG_UPLOAD_FILE_TIMEOUT"
 	UseWalDeltaSetting            = "WALG_USE_WAL_DELTA"
 	UseReverseUnpackSetting       = "WALG_USE_REVERSE_UNPACK"
 	SkipRedundantTarsSetting      = "WALG_SKIP_REDUNDANT_TARS"
@@ -124,6 +125,8 @@ const (
 	FailoverStorageCacheEMAAlphaDeadMin  = "WALG_FAILOVER_STORAGES_CACHE_EMA_ALPHA_DEAD_MIN"
 	FailoverStoragesCheckSize            = "WALG_FAILOVER_STORAGES_CHECK_SIZE"
 	PgDaemonWALUploadTimeout             = "WALG_DAEMON_WAL_UPLOAD_TIMEOUT"
+	PgWalPushTimeout                     = "WALG_WAL_PUSH_TIMEOUT"
+	PgBackupPushTimeout                  = "WALG_BACKUP_PUSH_TIMEOUT"
 	PgTargetStorage                      = "WALG_TARGET_STORAGE"
 	DisablePartialRestore                = "WALG_DISABLE_PARTIAL_RESTORE"
 
@@ -377,6 +380,7 @@ var (
 		StoragePrefixSetting:          true,
 		DiskRateLimitSetting:          true,
 		NetworkRateLimitSetting:       true,
+		UploadFileTimeoutSetting:      true,
 		UseWalDeltaSetting:            true,
 		LogLevelSetting:               true,
 		LogDestinationSetting:         true,
@@ -546,6 +550,8 @@ var (
 		FailoverStorageCacheEMAAlphaDeadMin:  true,
 		FailoverStoragesCheckSize:            true,
 		PgDaemonWALUploadTimeout:             true,
+		PgWalPushTimeout:                     true,
+		PgBackupPushTimeout:                  true,
 		DisablePartialRestore:                true,
 		ForceWalDetal:                        true,
 		PgAppName:                            true,
@@ -1093,6 +1099,40 @@ func GetDurationSetting(setting string) (time.Duration, error) {
 		return 0, fmt.Errorf("duration expected for %s setting but given '%s': %w", setting, intervalStr, err)
 	}
 	return interval, nil
+}
+
+// NoTimeout is the value of a timeout setting that disables the timeout.
+const NoTimeout = "-1"
+
+// ParseTimeout parses a timeout value such as "30s" or "5m".
+// "-1", "0" and empty mean "no timeout" and are returned as 0.
+func ParseTimeout(value string) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == NoTimeout || value == "0" {
+		return 0, nil
+	}
+	timeout, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("duration (e.g. 30s, 5m) or %s expected but given '%s': %w", NoTimeout, value, err)
+	}
+	if timeout < 0 {
+		return 0, nil
+	}
+	return timeout, nil
+}
+
+// GetTimeoutSetting reads a timeout setting, see ParseTimeout.
+// Unset settings mean "no timeout". The result is 0 when there is no timeout.
+func GetTimeoutSetting(setting string) (time.Duration, error) {
+	value, ok := GetSetting(setting)
+	if !ok {
+		return 0, nil
+	}
+	timeout, err := ParseTimeout(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s setting: %w", setting, err)
+	}
+	return timeout, nil
 }
 
 func GetDurationSettingDefault(setting string, def time.Duration) (time.Duration, error) {

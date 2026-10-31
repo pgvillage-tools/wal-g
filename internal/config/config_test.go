@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -122,4 +123,23 @@ func resetToDefaults() {
 	internal.ConfigureSettings(config.PG)
 	config.InitConfig()
 	config.Configure()
+}
+
+func TestParseTimeout(t *testing.T) {
+	for value, want := range map[string]time.Duration{
+		"":     0,
+		"-1":   0,
+		"0":    0,
+		"-5m":  0,
+		"30s":  30 * time.Second,
+		" 5m ": 5 * time.Minute,
+	} {
+		got, err := config.ParseTimeout(value)
+		assert.NoError(t, err, value)
+		assert.Equal(t, want, got, value)
+	}
+	for _, value := range []string{"5", "soon", "-1x"} {
+		_, err := config.ParseTimeout(value)
+		assert.Error(t, err, value)
+	}
 }

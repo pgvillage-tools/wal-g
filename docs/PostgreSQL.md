@@ -214,6 +214,27 @@ If a backup is started from a standby server, WAL-G will monitor the timeline of
 
 ``backup-push`` can also be run with the ``--permanent`` flag, which will mark the backup as permanent and prevent it from being removed when running ``delete``.
 
+#### Timeouts
+
+Two timeouts protect ``backup-push`` (and other commands) from hanging forever when the storage stops responding:
+
+* `WALG_UPLOAD_FILE_TIMEOUT` limits every single object upload to storage (each backup tar partition, WAL file,
+  sentinel and metadata file). It applies to all commands that write to storage, including ``wal-push``.
+  Choose it large enough to upload the biggest file at your bandwidth: tar partitions can be as large as
+  `WALG_TAR_SIZE_THRESHOLD` (1 GB by default) before compression, and `WALG_NETWORK_RATE_LIMIT` slows uploads down.
+  `-1` (the default) disables it.
+* `WALG_BACKUP_PUSH_TIMEOUT` (or the ``--timeout`` flag, which takes precedence) limits the whole ``backup-push`` run.
+  `-1` (the default) disables it.
+
+```bash
+WALG_UPLOAD_FILE_TIMEOUT=5m wal-g backup-push --timeout 6h $PGDATA
+```
+
+Timeouts are given as durations such as `30s`, `5m` or `2h`. When a timeout expires, in-flight storage
+operations are cancelled and ``backup-push`` exits with a non-zero code. PostgreSQL ends the backup when the
+connection closes. The partially uploaded backup has no sentinel, so it is not listed by ``backup-list``
+and can be removed with ``delete garbage``.
+
 #### Journal size (WAL volume) accounting
 
 Run ``backup-push`` with the ``--count-journals`` flag to maintain a ``journal_<backup>`` object per backup in storage, tracking the volume of WAL accumulated between that backup and the next one. The size is computed from the actual storage object sizes of the archived WAL segments, so it correctly reflects compression, unlike an LSN-difference estimate.
@@ -396,6 +417,20 @@ wal-g wal-push /path/to/archive
 ```
 
 This command is intended to be executed from the Postgres [archive_command](https://www.postgresql.org/docs/current/runtime-config-wal.html#GUC-ARCHIVE-COMMAND) parameter.
+
+By default `wal-push` has no time limit, so it can hang for a long time when the storage is unreachable
+(for example, when the S3 endpoint does not respond). To bound its runtime, set `WALG_WAL_PUSH_TIMEOUT`
+or pass `--timeout`:
+
+```bash
+wal-g wal-push --timeout 5m /path/to/archive
+```
+
+The timeout covers the whole command (storage setup, the overwrite check, the upload itself and background
+uploads of other `.ready` WAL files). When it expires, in-flight storage operations are cancelled and
+`wal-push` exits with a non-zero code, so PostgreSQL will retry archiving the segment later.
+`--timeout` takes precedence over `WALG_WAL_PUSH_TIMEOUT`. `-1` (the default) disables the limit.
+See also [`WALG_UPLOAD_FILE_TIMEOUT`](#timeouts), which limits every single file upload.
 
 ### ``wal-show``
 
