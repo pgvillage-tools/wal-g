@@ -88,6 +88,18 @@ Overrides the default minimum time between retries when throttled in millisecond
 
 Overrides the default minimum time between retries when throttled in milliseconds. Default is 300000ms.
 
+* `S3_IDLE_TIMEOUT`
+
+Fails an S3 request when its connection sends and receives nothing for this long, e.g. `1m`. This happens when the
+endpoint accepts connections but never answers, stops reading an upload or stops sending a download. The failed
+request is retried on a new connection, up to `WALG_S3_MAX_RETRIES` times, so a request to an unresponsive endpoint
+gives up after roughly `(WALG_S3_MAX_RETRIES + 1) × S3_IDLE_TIMEOUT` plus the backoff between retries (up to
+`S3_MAX_THROTTLING_RETRY_DELAY`). Slow transfers are fine as long as data keeps flowing. Choose it larger than the
+longest time the endpoint may need before it starts answering (some S3-compatible servers only answer the completion
+of a large multipart upload when they are done assembling it). `-1` (the default) disables it.
+See also [`WALG_STORAGE_OPERATION_TIMEOUT`](README.md#timeouts), which limits every storage operation for all storage
+types.
+
 * `S3_RETENTION_PERIOD`
 
 Sets retention period in seconds to files, uploaded to s3. Default is disabled with value -1.

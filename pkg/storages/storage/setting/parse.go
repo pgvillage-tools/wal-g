@@ -3,6 +3,8 @@ package setting
 import (
 	"fmt"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // TODO: Instead of reading settings from viper as strings and then parsing them here, read them already parsed using
@@ -54,6 +56,23 @@ func Int64Optional(settings map[string]string, key string, defaultVal int64) (in
 		return val, nil
 	}
 	return defaultVal, nil
+}
+
+// TimeoutOptional parses a timeout such as "30s" or "5m". "-1", "0" and negative values mean "no timeout"
+// and are returned as 0.
+func TimeoutOptional(settings map[string]string, key string) (time.Duration, error) {
+	strVal := strings.TrimSpace(settings[key])
+	if strVal == "" || strVal == "-1" || strVal == "0" {
+		return 0, nil
+	}
+	val, err := time.ParseDuration(strVal)
+	if err != nil {
+		return 0, fmt.Errorf("setting %q must be a duration (e.g. 30s, 5m) or -1: %w", key, err)
+	}
+	if val < 0 {
+		return 0, nil
+	}
+	return val, nil
 }
 
 func FirstDefined(settings map[string]string, keys ...string) string {

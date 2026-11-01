@@ -183,11 +183,32 @@ The directory to store profiles in. Defaults to `$TMPDIR`.
 Network traffic rate limit during the ```backup-push```/```backup-fetch``` operations in bytes per second.
 
 ### Timeouts
+Without timeouts, every command that talks to the storage can hang forever when the storage endpoint accepts
+connections but never answers. All timeouts are durations such as `30s`, `5m` or `2h`. `-1` (the default)
+disables them.
+
+* `WALG_STORAGE_OPERATION_TIMEOUT`
+
+Maximum duration of a single storage operation other than an upload: listing a folder, checking whether an object
+exists, reading object metadata, deleting, copying and validating the storage. A download may take longer as a whole,
+but every single read of its content must finish within this time, so a download fails when the storage stops sending
+data. The time includes retries of the storage client. Listing a folder includes all its pages, so choose it large
+enough to list your biggest folder (usually `wal_005`), e.g. `5m`. Applies to all commands and all storage types.
+
 * `WALG_UPLOAD_FILE_TIMEOUT`
 
 Maximum duration of a single file upload to storage, e.g. `5m`. Protects against uploads hanging forever when the
 storage endpoint stops responding. Must be large enough to upload the biggest file (e.g. a backup tar partition)
-at the available bandwidth. `-1` (the default) disables it.
+at the available bandwidth.
+
+* `S3_IDLE_TIMEOUT`
+
+S3 only: fails (and retries) a single S3 request when its connection makes no progress for this long, e.g. `1m`.
+See [S3 settings](STORAGES.md).
+
+The storage timeouts only apply to the storages configured in the main configuration (and its failover storages),
+not to the storages of ``wal-g copy`` and ``wal-g st cp``, which come from separate configuration files. `S3_IDLE_TIMEOUT` can be set
+in those files.
 
 
 ### Database-specific options

@@ -49,6 +49,7 @@ const (
 	disable100ContinueSetting      = "S3_DISABLE_100_CONTINUE"
 	enableVersioningSetting        = "S3_ENABLE_VERSIONING"
 	deleteBatchSizeSetting         = "S3_DELETE_BATCH_SIZE"
+	idleTimeoutSetting             = "S3_IDLE_TIMEOUT"
 )
 
 var SettingList = []string{
@@ -87,6 +88,7 @@ var SettingList = []string{
 	disable100ContinueSetting,
 	enableVersioningSetting,
 	deleteBatchSizeSetting,
+	idleTimeoutSetting,
 }
 
 const (
@@ -182,6 +184,11 @@ func ConfigureStorage(
 		return nil, err
 	}
 
+	idleTimeout, err := setting.TimeoutOptional(settings, idleTimeoutSetting)
+	if err != nil {
+		return nil, err
+	}
+
 	config := &Config{
 		Secrets: &Secrets{
 			SecretKey: strings.TrimSpace(setting.FirstDefined(settings, secretAccessKeySetting, secretKeySetting)),
@@ -222,6 +229,7 @@ func ConfigureStorage(
 		Disable100Continue:      disable100Continue,
 		EnableVersioning:        settings[enableVersioningSetting],
 		DeleteBatchSize:         deleteBatchSize,
+		IdleTimeout:             idleTimeout,
 	}
 
 	st, err := NewStorage(ctx, config, rootWraps...)

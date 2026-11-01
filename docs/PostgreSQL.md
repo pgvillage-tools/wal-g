@@ -216,7 +216,9 @@ If a backup is started from a standby server, WAL-G will monitor the timeline of
 
 #### Timeouts
 
-Two timeouts protect ``backup-push`` (and other commands) from hanging forever when the storage stops responding:
+Timeouts protect ``backup-push`` (and other commands) from hanging forever when the storage stops responding.
+Besides the ones below, `WALG_STORAGE_OPERATION_TIMEOUT` and `S3_IDLE_TIMEOUT` limit every other storage operation,
+for all commands, see [Timeouts](README.md#timeouts).
 
 * `WALG_UPLOAD_FILE_TIMEOUT` limits every single object upload to storage (each backup tar partition, WAL file,
   sentinel and metadata file). It applies to all commands that write to storage, including ``wal-push``.
